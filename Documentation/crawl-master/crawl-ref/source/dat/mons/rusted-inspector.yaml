@@ -1,0 +1,20 @@
+name: "rusted inspector"
+glyph: {char: "9", colour: etc_earth}
+flags: [see_invis, no_skeleton]
+resists: {elec: 1, corr: 1}
+exp: 816
+holiness: [nonliving]
+will: 100
+attacks:
+ - {type: bite, flavour: corrode, damage: 32}
+hd: 14
+hp_10x: 815
+ac: 14
+ev: 2
+spells: rusted_inspector
+shout: squeak
+habitat: amphibious
+intelligence: human
+uses: open_doors
+size: medium
+shape: snake

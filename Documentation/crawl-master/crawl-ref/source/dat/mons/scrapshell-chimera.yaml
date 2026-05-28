@@ -1,0 +1,21 @@
+name: "scrapshell chimera"
+glyph: {char: "H", colour: cyan}
+flags: [see_invis, no_poly_to, no_gen_derived]
+resists: {elec: 1, poison: 1, fire: 2, cold: 2}
+exp: 2332
+will: 100
+attacks:
+ - {type: bite, flavour: drag, damage: 38}
+ - {type: kick, damage: 34}
+ - {type: sting, damage: 30}
+hd: 21
+hp_10x: 1065
+ac: 23
+ev: 4
+spells: scrapshell_chimera
+shout: gurgle
+intelligence: animal
+habitat: amphibious
+energy: {swim: 8}
+size: giant
+shape: misc

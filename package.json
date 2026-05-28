@@ -1,0 +1,11 @@
+{
+  "name": "dcss-multiplayer",
+  "version": "0.1.0",
+  "description": "Dungeon Crawl Stone Soup — 2 Player Multiplayer Reimplementation",
+  "type": "module",
+  "scripts": {
+    "start": "npx --yes serve . --listen 3000 --no-clipboard",
+    "dev": "npx --yes serve . --listen 3000"
+  },
+  "devDependencies": {}
+}

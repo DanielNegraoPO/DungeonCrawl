@@ -1,0 +1,22 @@
+name: "mongrel wurm"
+glyph: {char: "k", colour: green}
+flags: [warm_blood]
+resists: {poison: 1, fire: 1}
+exp: 844
+genus: drake
+will: 60
+attacks:
+ - {type: bite, flavour: poison_strong, damage: 27}
+ - {type: kick, damage: 14}
+hd: 11
+hp_10x: 625
+ac: 6
+ev: 12
+spells: mongrel_wurm
+has_corpse: true
+shout: roar
+intelligence: animal
+habitat: amphibious
+speed: 12
+size: large
+shape: snake
