@@ -107,6 +107,12 @@ const UNID_SCROLL_NAMES = [
   'Pergaminho Vermelho', 'Pergaminho Amarelo'
 ];
 
+// === Item ID lists (derived from imported data) ===
+const POTION_IDS = Object.keys(POTION_TYPES);
+const SCROLL_IDS = Object.keys(SCROLL_TYPES);
+const WEAPON_IDS = ['dagger', 'short_sword', 'mace', 'hand_axe', 'spear', 'short_bow'];
+const ARMOUR_IDS = ['robe', 'leather', 'ring_mail', 'chain_mail'];
+
 // Per-game identification state (shared for both players)
 const identifiedPotions  = new Set();
 const identifiedScrolls  = new Set();
@@ -114,6 +120,7 @@ let potionNameMap  = {};
 let potionSpriteMap = {};
 let scrollNameMap  = {};
 let scrollSpriteMap = {};
+
 
 export function initItemSystem() {
   identifiedPotions.clear();
