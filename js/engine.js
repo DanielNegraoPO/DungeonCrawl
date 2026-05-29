@@ -169,33 +169,37 @@ export class GameEngine {
   _processNonPlayerTurns() {
     // Process monster turns until it's a player's turn
     let safety = 0;
-    while (safety++ < 200) {
+    while (safety++ < 300) {
+      // Remove dead actors first
       this.turnMgr.cleanDead();
+
       const entry = this.turnMgr.peekNext();
       if (!entry) break;
 
       const actor = entry.actor;
 
       if (actor.isPlayer) {
-        // It's a player's turn
+        // Dead player: skip their turn (advance time, they'll be revived later)
         if (actor.isDead) {
-          // Dead player: skip their turn
           this.turnMgr.advance();
           this.turnMgr.actorDone(actor, 10);
           continue;
         }
-        // Wait for input
+        // Living player: wait for keyboard input
         this.waitingForInput = true;
         this.ui.setActivePlayer(actor.playerIndex);
         this.renderer.centerOn(actor.x, actor.y);
         break;
       } else {
-        // Monster turn: process immediately
-        this.turnMgr.advance();
-        if (!actor.isDead) {
-          this._processMonsterTurn(actor);
-          this.turnMgr.actorDone(actor, actor.getActionCost());
+        // Monster turn
+        if (actor.isDead) {
+          // Remove dead monster from queue entirely
+          this.turnMgr.removeActor(actor);
+          continue;
         }
+        this.turnMgr.advance();
+        this._processMonsterTurn(actor);
+        this.turnMgr.actorDone(actor, actor.getActionCost());
       }
     }
   }
@@ -388,57 +392,55 @@ export class GameEngine {
     }
 
     // --- Action keys (P1) ---
-    // G = pick up
-    if (e.code === 'KeyG' && pIdx === 0) {
-      e.preventDefault();
-      handled = this._playerPickup(p);
-      if (!handled) handled = false;
-    }
-    // I = inventory
-    if (e.code === 'KeyI' && pIdx === 0) {
-      e.preventDefault();
-      this.ui.openInventory(p, (key) => this._playerUseItem(p, key));
-      return; // no turn consumed
-    }
-    // Z = cast spell
-    if (e.code === 'KeyZ' && pIdx === 0) {
-      e.preventDefault();
-      if (p.knownSpells && p.knownSpells.length > 0) {
-        this.ui.openSpellMenu(p, (spell) => this._playerCastSpell(p, spell));
-      } else {
-        this.ui.addMessage('Você não conhece nenhum feitiço.', 'warn', pIdx);
+    if (pIdx === 0) {
+      // G = pick up
+      if (e.code === 'KeyG') {
+        e.preventDefault();
+        const ok = this._playerPickup(p);
+        handled = ok; // Only consume turn if pickup succeeded
       }
-      return;
-    }
-    // . = wait (P1 period key)
-    if (e.code === 'Period' && pIdx === 0) {
-      e.preventDefault();
-      this._playerWait(p);
-      handled = true;
+      // I = inventory
+      else if (e.code === 'KeyI') {
+        e.preventDefault();
+        this.ui.openInventory(p, (key) => this._playerUseItem(p, key));
+        return; // no turn consumed
+      }
+      // Z = cast spell
+      else if (e.code === 'KeyZ') {
+        e.preventDefault();
+        if (p.knownSpells && p.knownSpells.length > 0) {
+          this.ui.openSpellMenu(p, (spell) => this._playerCastSpell(p, spell));
+        } else {
+          this.ui.addMessage('Você não conhece nenhum feitiço.', 'warn', pIdx);
+        }
+        return;
+      }
     }
 
     // --- Action keys (P2) ---
-    // Numpad0 = pick up
-    if ((e.code === 'Numpad0' || e.code === 'NumpadDecimal') && pIdx === 1) {
-      e.preventDefault();
-      handled = this._playerPickup(p);
-      if (!handled) handled = false;
-    }
-    // NumpadDivide or Slash = inventory
-    if ((e.code === 'NumpadDivide' || e.code === 'Slash') && pIdx === 1) {
-      e.preventDefault();
-      this.ui.openInventory(p, (key) => this._playerUseItem(p, key));
-      return;
-    }
-    // NumpadEnter = cast spell
-    if (e.code === 'NumpadEnter' && pIdx === 1) {
-      e.preventDefault();
-      if (p.knownSpells && p.knownSpells.length > 0) {
-        this.ui.openSpellMenu(p, (spell) => this._playerCastSpell(p, spell));
-      } else {
-        this.ui.addMessage('Você não conhece nenhum feitiço.', 'warn', pIdx);
+    if (pIdx === 1) {
+      // Numpad0 or G = pick up
+      if (e.code === 'Numpad0' || e.code === 'NumpadDecimal' || e.code === 'KeyG') {
+        e.preventDefault();
+        const ok = this._playerPickup(p);
+        handled = ok;
       }
-      return;
+      // NumpadDivide or Slash = inventory
+      else if (e.code === 'NumpadDivide' || e.code === 'Slash' || e.code === 'KeyI') {
+        e.preventDefault();
+        this.ui.openInventory(p, (key) => this._playerUseItem(p, key));
+        return;
+      }
+      // NumpadEnter or Z = cast spell
+      else if (e.code === 'NumpadEnter' || e.code === 'KeyZ') {
+        e.preventDefault();
+        if (p.knownSpells && p.knownSpells.length > 0) {
+          this.ui.openSpellMenu(p, (spell) => this._playerCastSpell(p, spell));
+        } else {
+          this.ui.addMessage('Você não conhece nenhum feitiço.', 'warn', pIdx);
+        }
+        return;
+      }
     }
 
     if (handled) {
@@ -453,6 +455,7 @@ export class GameEngine {
       this._updateLOS();
     }
   }
+
 
   _playerMoveOrAttack(player, dx, dy) {
     const nx = player.x + dx;

@@ -728,36 +728,39 @@ html, body {
 }
 
 #message-log {
-  height: 100px;
-  background: rgba(0,0,0,0.7);
-  border-top: 1px solid var(--border);
+  height: 130px;
+  background: rgba(0,0,0,0.85);
+  border-top: 2px solid var(--border);
   padding: 6px 10px;
   overflow-y: auto;
   scroll-behavior: smooth;
+  font-family: 'Courier New', Consolas, monospace;
 }
 
 #message-content {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .message-line {
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
   padding: 1px 0;
+  opacity: 0.75;
+  transition: opacity 0.5s;
 }
 
-.message-line.new { color: var(--text-primary); }
-.message-line.hit { color: #e07040; }
-.message-line.kill { color: var(--gold); }
-.message-line.info { color: #60a0d0; }
-.message-line.warn { color: #e0c040; }
-.message-line.good { color: #60d080; }
-.message-line.p1 { color: var(--p1-color); }
-.message-line.p2 { color: var(--p2-color); }
-.message-line.system { color: var(--silver); font-style: italic; }
+.message-line.msg-new {
+  opacity: 1;
+  font-weight: bold;
+  animation: msgFlash 0.4s ease;
+}
+
+@keyframes msgFlash {
+  0%   { background: rgba(255,255,255,0.08); }
+  100% { background: transparent; }
+}
 
 #turn-indicator {
   height: 32px;

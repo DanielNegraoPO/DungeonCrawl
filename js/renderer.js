@@ -128,73 +128,78 @@ export class Renderer {
     const camX = Math.round(this.camX);
     const camY = Math.round(this.camY);
 
-    ctx.fillStyle = '#000';
+    // Clear to pitch black (unexplored)
+    ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     const startX = Math.max(0, camX);
     const startY = Math.max(0, camY);
-    const endX   = Math.min(mapW, camX + this.viewW + 1);
-    const endY   = Math.min(mapH, camY + this.viewH + 1);
+    const endX   = Math.min(mapW, camX + this.viewW + 2);
+    const endY   = Math.min(mapH, camY + this.viewH + 2);
 
-    // Combine LOS from both players
+    // Pre-compute LOS key sets for fast lookup
     const combinedLOS = new Set([...losP1, ...losP2]);
 
-    // Render tiles
+    // === RENDER TILES ===
+    // seen is already updated by engine._updateLOS() before this call
     for (let ty = startY; ty < endY; ty++) {
       for (let tx = startX; tx < endX; tx++) {
+        const key     = `${tx},${ty}`;
+        const inLOS   = combinedLOS.has(key);
+        const seenRow = dungeon.seen ? dungeon.seen[ty] : null;
+        const seen    = seenRow ? seenRow[tx] : false;
+
+        // Skip cells never seen by anyone
+        if (!inLOS && !seen) continue;
+
         const screenX = (tx - camX) * TILE_SIZE;
         const screenY = (ty - camY) * TILE_SIZE;
         const cell    = dungeon.map[ty][tx];
-        const visP1   = isVisible(losP1, tx, ty);
-        const visP2   = isVisible(losP2, tx, ty);
-        const inLOS   = visP1 || visP2;
-        const seen    = dungeon.seen ? dungeon.seen[ty]?.[tx] : false;
 
-        if (!inLOS && !seen) continue; // Never seen
+        // Alpha: 1.0 = fully lit (in LOS), 0.4 = seen but in dark
+        const alpha = inLOS ? 1.0 : 0.38;
 
-        // Draw floor first (even for walls, as base)
-        this._drawTile(ctx, this._getFloorTile(tx, ty), screenX, screenY, inLOS ? 1.0 : 0.35);
+        // Draw floor base
+        this._drawTile(ctx, this._getFloorTile(tx, ty), screenX, screenY, alpha);
 
-        // Overlay cell content
+        // Draw cell feature on top
         switch (cell) {
           case FEATURES.WALL:
-            this._drawTile(ctx, this._getWallTile(tx, ty), screenX, screenY, inLOS ? 1.0 : 0.35);
+            this._drawTile(ctx, this._getWallTile(tx, ty), screenX, screenY, alpha);
             break;
           case FEATURES.STAIR_DOWN:
-            this._drawTile(ctx, FEAT_TILES.stair_down, screenX, screenY, inLOS ? 1.0 : 0.35);
+            this._drawTile(ctx, FEAT_TILES.stair_down, screenX, screenY, alpha);
             break;
           case FEATURES.STAIR_UP:
-            this._drawTile(ctx, FEAT_TILES.stair_up, screenX, screenY, inLOS ? 1.0 : 0.35);
+            this._drawTile(ctx, FEAT_TILES.stair_up, screenX, screenY, alpha);
             break;
           case FEATURES.SHRINE:
             this._drawShrine(ctx, screenX, screenY, inLOS);
             break;
           case FEATURES.DOOR:
-            this._drawTile(ctx, FEAT_TILES.door, screenX, screenY, inLOS ? 1.0 : 0.35);
+            this._drawTile(ctx, FEAT_TILES.door, screenX, screenY, alpha);
             break;
           case FEATURES.DOOR_OPEN:
-            this._drawTile(ctx, FEAT_TILES.door_open, screenX, screenY, inLOS ? 1.0 : 0.35);
+            this._drawTile(ctx, FEAT_TILES.door_open, screenX, screenY, alpha);
             break;
         }
 
-        // Player color overlay to show P1/P2 vision
-        if (visP1 && !visP2) {
-          ctx.fillStyle = 'rgba(224,85,85,0.04)';
-          ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
-        } else if (visP2 && !visP1) {
-          ctx.fillStyle = 'rgba(85,144,224,0.04)';
+        // Tint seen-but-dark cells slightly blue (DCSS fog of war look)
+        if (!inLOS && seen) {
+          ctx.fillStyle = 'rgba(0, 20, 60, 0.35)';
           ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
         }
-      }
-    }
 
-    // Mark seen cells
-    if (dungeon.seen) {
-      for (let ty = startY; ty < endY; ty++) {
-        for (let tx = startX; tx < endX; tx++) {
-          if (combinedLOS.has(`${tx},${ty}`)) {
-            if (!dungeon.seen[ty]) dungeon.seen[ty] = {};
-            dungeon.seen[ty][tx] = true;
+        // Subtle vision cone tint per player
+        if (inLOS) {
+          const visP1 = losP1.has(key);
+          const visP2 = losP2.has(key);
+          if (visP1 && !visP2) {
+            ctx.fillStyle = 'rgba(220, 80, 80, 0.04)';
+            ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+          } else if (visP2 && !visP1) {
+            ctx.fillStyle = 'rgba(80, 140, 220, 0.04)';
+            ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
           }
         }
       }
@@ -377,50 +382,91 @@ export class Renderer {
   }
 
   _drawItem(ctx, item, sx, sy) {
-    // Draw a small colored icon for the item
-    const size = 10;
-    const ox = (TILE_SIZE - size) / 2;
-    const oy = (TILE_SIZE - size) / 2;
+    // Try to draw the DCSS sprite if available
+    if (item.spritePath) {
+      const img = loadTile(item.spritePath);
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, sx, sy, TILE_SIZE, TILE_SIZE);
+        return;
+      }
+    }
 
-    ctx.fillStyle = item.color || '#888';
+    // --- Fallback: draw colored shape ---
+    const size = 12;
+    const cx = sx + TILE_SIZE / 2;
+    const cy = sy + TILE_SIZE / 2;
 
     if (item.type === 'potion') {
-      // Draw bottle shape
+      // Rounded bottle
+      ctx.fillStyle = item.color || '#8888ff';
       ctx.beginPath();
-      ctx.arc(sx + TILE_SIZE/2, sy + TILE_SIZE/2, size/2 + 2, 0, Math.PI*2);
+      ctx.arc(cx, cy + 2, size / 2 + 2, 0, Math.PI * 2);
       ctx.fill();
+      // bottle neck
+      ctx.fillRect(cx - 3, cy - size / 2 - 2, 6, 5);
+      // shine
       ctx.fillStyle = 'rgba(255,255,255,0.5)';
       ctx.beginPath();
-      ctx.arc(sx + TILE_SIZE/2 - 2, sy + TILE_SIZE/2 - 2, 2, 0, Math.PI*2);
+      ctx.arc(cx - 2, cy - 1, 2, 0, Math.PI * 2);
       ctx.fill();
     } else if (item.type === 'scroll') {
       ctx.fillStyle = '#e8e0c0';
-      ctx.fillRect(sx + ox, sy + oy, size, size + 2);
+      ctx.fillRect(sx + 6, sy + 5, 20, 22);
       ctx.strokeStyle = '#808060';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx + 6, sy + 5, 20, 22);
+      // lines to suggest text
+      ctx.strokeStyle = '#c0b880';
       ctx.lineWidth = 0.5;
-      ctx.strokeRect(sx + ox, sy + oy, size, size + 2);
+      for (let line = 0; line < 3; line++) {
+        ctx.beginPath();
+        ctx.moveTo(sx + 9, sy + 10 + line * 5);
+        ctx.lineTo(sx + 23, sy + 10 + line * 5);
+        ctx.stroke();
+      }
     } else if (item.type === 'gold') {
+      // Gold coin pile
       ctx.fillStyle = '#f0c020';
       ctx.beginPath();
-      ctx.arc(sx + TILE_SIZE/2, sy + TILE_SIZE/2, size/2, 0, Math.PI*2);
+      ctx.arc(cx, cy + 2, size / 2 + 1, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#c09010';
-      ctx.font = 'bold 7px monospace';
+      ctx.font = 'bold 9px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('$', sx + TILE_SIZE/2, sy + TILE_SIZE/2 + 2);
+      ctx.fillText('$', cx, cy + 6);
     } else if (item.type === 'weapon') {
-      ctx.strokeStyle = '#c0c0c0';
+      // Diagonal sword
+      ctx.strokeStyle = '#d0d0d0';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(sx + 6, sy + 26);
+      ctx.lineTo(sx + 26, sy + 6);
+      ctx.stroke();
+      // crossguard
+      ctx.strokeStyle = '#a08040';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(sx + 8, sy + 8);
-      ctx.lineTo(sx + TILE_SIZE - 8, sy + TILE_SIZE - 8);
+      ctx.moveTo(sx + 11, sy + 11);
+      ctx.lineTo(sx + 20, sy + 20);
       ctx.stroke();
     } else if (item.type === 'armour') {
-      ctx.strokeStyle = item.color || '#a08040';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(sx + 8, sy + 8, TILE_SIZE - 16, TILE_SIZE - 16);
+      // Shield/armour shape
+      ctx.fillStyle = item.color || '#a08040';
+      ctx.beginPath();
+      ctx.moveTo(cx, sy + 5);
+      ctx.lineTo(sx + 26, sy + 12);
+      ctx.lineTo(sx + 26, sy + 22);
+      ctx.lineTo(cx, sy + 28);
+      ctx.lineTo(sx + 6, sy + 22);
+      ctx.lineTo(sx + 6, sy + 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#c0a060';
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
   }
+
 
   _renderFlashes(ctx, camX, camY) {
     for (let i = this.flashEffects.length - 1; i >= 0; i--) {

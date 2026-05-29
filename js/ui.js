@@ -13,37 +13,51 @@ export class UIManager {
 
   // === MESSAGES ===
   addMessage(text, type = 'normal', playerIdx = -1) {
-    const cls = this._msgClass(type, playerIdx);
-    this.messages.push({ text, cls });
+    const timestamp = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    this.messages.push({ text, type, playerIdx, timestamp });
     if (this.messages.length > MAX_MESSAGES) this.messages.shift();
     this._renderMessages();
   }
 
-  _msgClass(type, playerIdx) {
-    if (playerIdx === 0) return 'p1';
-    if (playerIdx === 1) return 'p2';
+  _msgColor(type, playerIdx) {
+    // Player-specific first
+    if (playerIdx === 0) return '#ff9999';  // P1 red-ish
+    if (playerIdx === 1) return '#99bbff';  // P2 blue-ish
     switch (type) {
-      case 'hit':    return 'hit';
-      case 'kill':   return 'kill';
-      case 'info':   return 'info';
-      case 'warn':   return 'warn';
-      case 'good':   return 'good';
-      case 'system': return 'system';
-      default:       return 'new';
+      case 'hit':    return '#ff5555';  // Damage received (red)
+      case 'kill':   return '#ffd700';  // Kill (gold)
+      case 'good':   return '#55ff55';  // Good news (green)
+      case 'warn':   return '#ff8800';  // Warning (orange)
+      case 'system': return '#888888';  // System (gray)
+      case 'info':   return '#aaaaaa';  // Info (light gray)
+      default:       return '#cccccc';  // Normal (white-ish)
     }
+  }
+
+  _msgPrefix(type, playerIdx) {
+    if (playerIdx === 0) return '[J1] ';
+    if (playerIdx === 1) return '[J2] ';
+    if (type === 'system') return '* ';
+    if (type === 'kill')   return '✦ ';
+    if (type === 'warn')   return '! ';
+    if (type === 'good')   return '+ ';
+    if (type === 'hit')    return '▼ ';
+    return '';
   }
 
   _renderMessages() {
     if (!this.messageEl) return;
-    // Keep last 20 visible
-    const recent = this.messages.slice(-20);
+    const recent = this.messages.slice(-25);
     this.messageEl.innerHTML = recent.map((m, i) => {
-      const isNew = i === recent.length - 1;
-      return `<div class="message-line ${m.cls} ${isNew ? 'new' : ''}">${m.text}</div>`;
+      const isNew   = i === recent.length - 1;
+      const color   = this._msgColor(m.type, m.playerIdx);
+      const prefix  = this._msgPrefix(m.type, m.playerIdx);
+      return `<div class="message-line${isNew ? ' msg-new' : ''}" style="color:${color}">${prefix}${m.text}</div>`;
     }).join('');
-    // Scroll to bottom
-    const log = document.getElementById('message-log');
-    if (log) log.scrollTop = log.scrollHeight;
+    // Auto-scroll to bottom
+    if (this.messageEl.parentElement) {
+      this.messageEl.parentElement.scrollTop = this.messageEl.parentElement.scrollHeight;
+    }
   }
 
   // === HUD UPDATE ===

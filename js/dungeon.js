@@ -162,36 +162,46 @@ export class DungeonGenerator {
 
     const usedRooms = new Set();
 
-    // Player 1 start: room 0 center
-    const startRoom = this.rooms[0];
-    usedRooms.add(0);
-    this.features.push({x: startRoom.cx, y: startRoom.cy, type: 'start_p1'});
+    // Both players start in the SAME room (room 0 - the largest/first room)
+    // Sort rooms by size to get the biggest one first
+    const sortedBySize = [...this.rooms].sort((a, b) => (b.w * b.h) - (a.w * a.h));
+    const startRoom = sortedBySize[0];
+    const startIdx = this.rooms.indexOf(startRoom);
+    usedRooms.add(startIdx);
 
-    // Player 2 start: last room center (or close to it)
-    const p2Idx = this.rooms.length - 1;
-    const p2Room = this.rooms[p2Idx];
-    usedRooms.add(p2Idx);
-    this.features.push({x: p2Room.cx, y: p2Room.cy, type: 'start_p2'});
+    // P1: slightly left of center, P2: slightly right of center (both in same room)
+    const p1x = Math.max(startRoom.x + 1, startRoom.cx - 1);
+    const p1y = startRoom.cy;
+    const p2x = Math.min(startRoom.x + startRoom.w - 2, startRoom.cx + 1);
+    const p2y = startRoom.cy;
 
-    // Shrine (revival point) - a mid room
-    const shrineIdx = Math.floor(this.rooms.length / 2);
+    this.features.push({x: p1x, y: p1y, type: 'start_p1'});
+    this.features.push({x: p2x, y: p2y, type: 'start_p2'});
+
+    // Shrine (revival point) - in a different room, mid-dungeon
+    let shrineIdx = Math.floor(this.rooms.length / 2);
+    if (shrineIdx === startIdx) shrineIdx = (shrineIdx + 1) % this.rooms.length;
     const shrineRoom = this.rooms[shrineIdx];
     usedRooms.add(shrineIdx);
     this.map[shrineRoom.cy][shrineRoom.cx] = FEATURES.SHRINE;
     this.features.push({x: shrineRoom.cx, y: shrineRoom.cy, type: 'shrine'});
 
-    // Stairs down (near the end)
-    const stairRoom = this.rooms[Math.max(0, this.rooms.length - 2)];
-    const sx = stairRoom.cx + rng.int(-1, 1);
-    const sy = stairRoom.cy + rng.int(-1, 1);
+    // Stairs down (near the end — last room by sort)
+    const stairRoom = sortedBySize[sortedBySize.length - 1];
+    const stairIdx = this.rooms.indexOf(stairRoom);
+    const sx = stairRoom.cx;
+    const sy = stairRoom.cy;
     this.map[sy][sx] = FEATURES.STAIR_DOWN;
     this.features.push({x: sx, y: sy, type: 'stair_down'});
 
-    // Stairs up (near start)
-    const upRoom = this.rooms[Math.min(1, this.rooms.length-1)];
-    this.map[upRoom.cy][upRoom.cx] = FEATURES.STAIR_UP;
-    this.features.push({x: upRoom.cx, y: upRoom.cy, type: 'stair_up'});
+    // Stairs up (second room)
+    const upRoom = sortedBySize.length > 1 ? sortedBySize[1] : this.rooms[Math.min(1, this.rooms.length-1)];
+    if (upRoom !== startRoom) {
+      this.map[upRoom.cy][upRoom.cx] = FEATURES.STAIR_UP;
+      this.features.push({x: upRoom.cx, y: upRoom.cy, type: 'stair_up'});
+    }
   }
+
 
   // Returns all floor cells that are walkable
   getFloorCells() {

@@ -37,34 +37,50 @@
         <div class="player-controls p1">
           <h3>🔴 Jogador 1</h3>
           <table>
-            <tr><td>W A S D</td><td>Mover</td></tr>
-            <tr><td>Q E Z C</td><td>Mover diagonal</td></tr>
-            <tr><td>T</td><td>Esperar 1 turno</td></tr>
-            <tr><td>G</td><td>Pegar item</td></tr>
-            <tr><td>F</td><td>Usar magia / Habilidade</td></tr>
-            <tr><td>R</td><td>Ver inventário</td></tr>
+            <tr><td>W A S D</td><td>Mover (cardinal)</td></tr>
+            <tr><td>Q E Z C</td><td>Mover (diagonal)</td></tr>
+            <tr><td>h j k l</td><td>VI-keys ← ↓ ↑ → (DCSS)</td></tr>
+            <tr><td>y u b n</td><td>VI-keys diagonal</td></tr>
+            <tr><td>T ou .</td><td>Esperar 1 turno</td></tr>
+            <tr><td>G</td><td>Pegar item no chão</td></tr>
+            <tr><td>Z</td><td>Lançar feitiço</td></tr>
+            <tr><td>I</td><td>Ver inventário</td></tr>
           </table>
         </div>
         <div class="player-controls p2">
           <h3>🔵 Jogador 2</h3>
           <table>
-            <tr><td>↑ ← ↓ →</td><td>Mover</td></tr>
-            <tr><td>Home End ↖ ↗</td><td>Mover diagonal</td></tr>
+            <tr><td>↑ ← ↓ →</td><td>Mover (cardinal)</td></tr>
+            <tr><td>Num 7 / 9</td><td>Diagonal ↖ / ↗</td></tr>
+            <tr><td>Num 1 / 3</td><td>Diagonal ↙ / ↘</td></tr>
+            <tr><td>Num 4 / 6</td><td>← / →</td></tr>
             <tr><td>Num 5</td><td>Esperar 1 turno</td></tr>
-            <tr><td>Num 0</td><td>Pegar item</td></tr>
-            <tr><td>Num Enter</td><td>Usar magia</td></tr>
+            <tr><td>Num 0</td><td>Pegar item no chão</td></tr>
+            <tr><td>Num Enter</td><td>Lançar feitiço</td></tr>
             <tr><td>Num /</td><td>Ver inventário</td></tr>
           </table>
         </div>
       </div>
       <div class="mechanic-info">
-        <h3>⚙ Mecânicas</h3>
+        <h3>⚙ Mecânicas do Jogo</h3>
         <ul>
-          <li>Turnos são baseados em <strong>velocidade (AUT)</strong> — ações mais rápidas agem primeiro</li>
-          <li>Quando um jogador <strong>morre</strong>, ele vira espectador fantasma</li>
-          <li>O outro jogador pode <strong>reviver</strong> o parceiro encontrando um <strong>Santuário</strong> no mapa</li>
-          <li>Ambos os jogadores compartilham o <strong>mesmo dungeon</strong></li>
-          <li>Atacar: <strong>mova em direção ao inimigo</strong></li>
+          <li>Turnos por <strong>velocidade (AUT)</strong> — mais rápidos agem mais vezes por turno</li>
+          <li><strong>Mover em direção a inimigos</strong> ataca automaticamente</li>
+          <li>Quando um jogador <strong>morre</strong>, vira espectador fantasma</li>
+          <li>O aliado pode <strong>reviver</strong> o parceiro ao chegar em um <strong>Santuário ⛪ dourado</strong></li>
+          <li>O mapa se <strong>revela conforme você explora</strong> — áreas vistas ficam escurecidas</li>
+        </ul>
+      </div>
+      <div class="mechanic-info" style="margin-top:10px">
+        <h3>🎨 Cores do Log de Mensagens</h3>
+        <ul>
+          <li style="color:#ff9999">[J1] — ações do Jogador 1</li>
+          <li style="color:#99bbff">[J2] — ações do Jogador 2</li>
+          <li style="color:#ffd700">✦ — kills e inimigos mortos</li>
+          <li style="color:#ff5555">▼ — dano sofrido</li>
+          <li style="color:#55ff55">+ — curas e level up</li>
+          <li style="color:#ff8800">! — veneno e perigos</li>
+          <li style="color:#888888">* — mensagens do sistema</li>
         </ul>
       </div>
       <button id="btn-back-title" class="menu-btn secondary">← Voltar</button>
