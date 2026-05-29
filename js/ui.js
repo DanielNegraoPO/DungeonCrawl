@@ -152,7 +152,7 @@ export class UIManager {
   }
 
   // === INVENTORY MODAL ===
-  openInventory(player, onUse) {
+  openInventory(player, onUse, actionName = 'Usar/Equipar') {
     const modal = document.getElementById('inventory-modal');
     const title = document.getElementById('inventory-title');
     const eqEl  = document.getElementById('equipment-slots');
@@ -160,7 +160,7 @@ export class UIManager {
 
     if (!modal) return;
 
-    title.textContent = `Inventário — ${player.name}`;
+    title.textContent = `Inventário — ${player.name} (${actionName})`;
 
     // Equipment slots
     const slots = [
@@ -179,15 +179,18 @@ export class UIManager {
     if (player.inventory.length === 0) {
       invEl.innerHTML = '<div style="color:#555;padding:8px">Inventário vazio</div>';
     } else {
-      invEl.innerHTML = player.inventory.map(item => `
-        <div class="inv-item" data-key="${item.invKey}">
-          <span class="inv-item-key">${item.invKey}</span>
-          <div>
-            <div class="inv-item-name">${item.name}</div>
-            <div class="inv-item-desc">${item.desc || ''}</div>
+      invEl.innerHTML = player.inventory.map(item => {
+        const countStr = item.count > 1 ? `${item.count}x ` : '';
+        return `
+          <div class="inv-item" data-key="${item.invKey}">
+            <span class="inv-item-key">${item.invKey}</span>
+            <div>
+              <div class="inv-item-name">${countStr}${item.name}</div>
+              <div class="inv-item-desc">${item.desc || ''}</div>
+            </div>
           </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
 
       // Click to use
       invEl.querySelectorAll('.inv-item').forEach(el => {

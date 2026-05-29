@@ -218,10 +218,33 @@ export class Player {
 
   addToInventory(item) {
     const LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+    // Stacking logic for stackable items
+    if (item.type === 'potion' || item.type === 'scroll' || item.type === 'arrows') {
+      const existing = this.inventory.find(i => 
+        i.type === item.type && i.trueName === item.trueName && i.name === item.name
+      );
+      if (existing) {
+        existing.count = (existing.count || 1) + (item.count || 1);
+        return existing;
+      }
+    }
+
     if (this.inventory.length >= LETTERS.length) return false;
+    
+    item.count = item.count || 1;
     item.invKey = LETTERS[this.inventory.length];
     this.inventory.push(item);
-    return true;
+    return item;
+  }
+
+  dropItem(invKey) {
+    const idx = this.inventory.findIndex(i => i.invKey === invKey);
+    if (idx === -1) return null;
+    const item = this.inventory[idx];
+    this.inventory.splice(idx, 1);
+    this._reassignKeys();
+    return item;
   }
 
   useItem(invKey) {
@@ -230,14 +253,19 @@ export class Player {
     const item = this.inventory[idx];
     let result = null;
 
-    if (item.type === 'potion') {
-      result = this._usePotion(item);
-      this.inventory.splice(idx, 1);
-      this._reassignKeys();
-    } else if (item.type === 'scroll') {
-      result = { effect: item.effect, item };
-      this.inventory.splice(idx, 1);
-      this._reassignKeys();
+    if (item.type === 'potion' || item.type === 'scroll') {
+      if (item.type === 'potion') {
+        result = this._usePotion(item);
+      } else {
+        result = { effect: item.effect, item };
+      }
+      
+      if (item.count > 1) {
+        item.count--;
+      } else {
+        this.inventory.splice(idx, 1);
+        this._reassignKeys();
+      }
     } else if (item.type === 'weapon' || item.type === 'armour') {
       result = this._equipItem(item, idx);
     }

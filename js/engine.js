@@ -415,6 +415,12 @@ export class GameEngine {
         }
         return;
       }
+      // D = drop item
+      else if (e.code === 'KeyD') {
+        e.preventDefault();
+        this.ui.openInventory(p, (key) => this._playerDropItem(p, key), 'Soltar');
+        return;
+      }
     }
 
     // --- Action keys (P2) ---
@@ -425,7 +431,7 @@ export class GameEngine {
         const ok = this._playerPickup(p);
         handled = ok;
       }
-      // NumpadDivide or Slash = inventory
+      // NumpadDivide or Slash or I = inventory
       else if (e.code === 'NumpadDivide' || e.code === 'Slash' || e.code === 'KeyI') {
         e.preventDefault();
         this.ui.openInventory(p, (key) => this._playerUseItem(p, key));
@@ -439,6 +445,12 @@ export class GameEngine {
         } else {
           this.ui.addMessage('Você não conhece nenhum feitiço.', 'warn', pIdx);
         }
+        return;
+      }
+      // NumpadSubtract or D = drop item
+      else if (e.code === 'NumpadSubtract' || e.code === 'KeyD') {
+        e.preventDefault();
+        this.ui.openInventory(p, (key) => this._playerDropItem(p, key), 'Soltar');
         return;
       }
     }
@@ -527,9 +539,10 @@ export class GameEngine {
       );
       this.items.splice(itemIdx, 1);
     } else {
-      if (player.addToInventory({ ...item })) {
+      const addedItem = player.addToInventory({ ...item });
+      if (addedItem) {
         this.ui.addMessage(
-          `${player.name} pega ${item.name}.`,
+          `${player.name} pega ${item.name} (${addedItem.invKey}).`,
           'info', player.playerIndex
         );
         this.items.splice(itemIdx, 1);
@@ -547,6 +560,25 @@ export class GameEngine {
     if (result) {
       if (result.msg) this.ui.addMessage(result.msg, result.type || 'info', player.playerIndex);
       if (result.effect === 'teleport') this._teleportPlayer(player);
+      const cost = player.getActionCost('item');
+      this.turnMgr.advance();
+      this.turnMgr.actorDone(player, cost);
+      this.waitingForInput = false;
+      this._updateLOS();
+    }
+  }
+
+  _playerDropItem(player, key) {
+    const item = player.dropItem(key);
+    if (item) {
+      // Place it on the ground
+      item.x = player.x;
+      item.y = player.y;
+      this.items.push(item);
+
+      const countStr = item.count > 1 ? `${item.count}x ` : '';
+      this.ui.addMessage(`${player.name} soltou ${countStr}${item.name}.`, 'info', player.playerIndex);
+      
       const cost = player.getActionCost('item');
       this.turnMgr.advance();
       this.turnMgr.actorDone(player, cost);
