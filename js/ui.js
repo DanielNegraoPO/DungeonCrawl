@@ -9,6 +9,9 @@ export class UIManager {
     this.messages = [];
     this.messageEl = document.getElementById('message-content');
     this.turnQueueEl = document.getElementById('turn-queue');
+    this.inventoryOpen = false;
+    this.activeInventoryPlayer = null;
+    this.activeInventoryCallback = null;
   }
 
   // === MESSAGES ===
@@ -118,6 +121,89 @@ export class UIManager {
         `<div class="spell-entry">${s.name} (${s.mpCost}MP)</div>`
       ).join('') || '<div class="spell-entry" style="color:#555">Nenhum feitiço</div>';
     }
+
+    // HUD Inventory List
+    const invListEl = document.getElementById(`inventory-list-p${i}`);
+    if (invListEl) {
+      if (player.inventory.length === 0) {
+        invListEl.innerHTML = '<div class="spell-entry" style="color:#555">Inventário vazio</div>';
+      } else {
+        invListEl.innerHTML = player.inventory.map(item => {
+          const countStr = item.count > 1 ? `${item.count}x ` : '';
+          const name = item.name;
+          const isEquipped = (player.weapon && player.weapon.invKey === item.invKey) || 
+                             (player.armour && player.armour.invKey === item.invKey) ||
+                             (player.shield && player.shield.invKey === item.invKey);
+          const eqStr = isEquipped ? ' <span style="color:var(--gold); font-size:9px">(E)</span>' : '';
+          return `<div class="spell-entry inv-hud-item" data-key="${item.invKey}">
+            <span style="color:var(--gold-dim); font-family:monospace; margin-right:4px">${item.invKey}</span>
+            <span>${countStr}${name}${eqStr}</span>
+          </div>`;
+        }).join('');
+
+        // Make HUD inventory items clickable!
+        invListEl.querySelectorAll('.inv-hud-item').forEach(el => {
+          el.addEventListener('click', () => {
+            const key = el.dataset.key;
+            if (window.engine && window.engine.turnMgr) {
+              const active = window.engine.turnMgr.getActivePlayer();
+              if (active && active.playerIndex === player.playerIndex && window.engine.waitingForInput) {
+                window.engine._playerUseItem(player, key);
+              } else {
+                this.addMessage(`Não é o turno de ${player.name} para usar itens.`, 'info', player.playerIndex);
+              }
+            }
+          });
+        });
+      }
+    }
+
+    // Render Ground Item Section
+    const groundItemEl = document.getElementById(`ground-item-section-p${i}`);
+    if (groundItemEl) {
+      const itemOnGround = window.engine ? window.engine.items.find(item => item.x === player.x && item.y === player.y) : null;
+      if (itemOnGround && !player.isDead) {
+        const itemClass = itemOnGround.type === 'gold' ? 'gold' : '';
+        groundItemEl.innerHTML = `
+          <button class="hud-pickup-btn ${itemClass}" id="hud-pickup-btn-p${i}">
+            📥 Pegar ${itemOnGround.name}
+          </button>
+        `;
+        groundItemEl.classList.remove('hidden');
+
+        const pickupBtn = document.getElementById(`hud-pickup-btn-p${i}`);
+        if (pickupBtn) {
+          pickupBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (window.engine) {
+              window.engine._playerPickup(player);
+              window.engine._renderHUDs();
+            }
+          };
+        }
+      } else {
+        groundItemEl.innerHTML = '';
+        groundItemEl.classList.add('hidden');
+      }
+    }
+
+    // Set up open inventory button click on HUD
+    const openBtn = document.getElementById(`open-inv-btn-p${i}`);
+
+    const onOpenClick = (e) => {
+      e.stopPropagation();
+      if (window.engine && window.engine.turnMgr) {
+        const active = window.engine.turnMgr.getActivePlayer();
+        const isTheirTurn = active && active.playerIndex === player.playerIndex;
+        if (isTheirTurn && window.engine.waitingForInput) {
+          this.openInventory(player, (key) => window.engine._playerUseItem(player, key), 'Usar/Equipar');
+        } else {
+          this.openInventory(player, null, 'Visualização');
+        }
+      }
+    };
+
+    if (openBtn) openBtn.onclick = onOpenClick;
   }
 
   setActivePlayer(playerIdx) {
@@ -152,6 +238,16 @@ export class UIManager {
   }
 
   // === INVENTORY MODAL ===
+  closeInventory() {
+    const modal = document.getElementById('inventory-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+    }
+    this.inventoryOpen = false;
+    this.activeInventoryPlayer = null;
+    this.activeInventoryCallback = null;
+  }
+
   openInventory(player, onUse, actionName = 'Usar/Equipar') {
     const modal = document.getElementById('inventory-modal');
     const title = document.getElementById('inventory-title');
@@ -159,6 +255,10 @@ export class UIManager {
     const invEl = document.getElementById('inventory-list');
 
     if (!modal) return;
+
+    this.inventoryOpen = true;
+    this.activeInventoryPlayer = player;
+    this.activeInventoryCallback = onUse;
 
     title.textContent = `Inventário — ${player.name} (${actionName})`;
 
@@ -175,17 +275,27 @@ export class UIManager {
       </div>
     `).join('');
 
+    // Render gold amount in inventory modal
+    const goldDisplay = document.getElementById('inventory-gold-display');
+    if (goldDisplay) {
+      goldDisplay.innerHTML = `💰 Ouro: <span style="color:var(--text-white)">${player.gold}</span>`;
+    }
+
     // Inventory list
     if (player.inventory.length === 0) {
       invEl.innerHTML = '<div style="color:#555;padding:8px">Inventário vazio</div>';
     } else {
       invEl.innerHTML = player.inventory.map(item => {
         const countStr = item.count > 1 ? `${item.count}x ` : '';
+        const isEquipped = (player.weapon && player.weapon.invKey === item.invKey) || 
+                           (player.armour && player.armour.invKey === item.invKey) ||
+                           (player.shield && player.shield.invKey === item.invKey);
+        const eqStr = isEquipped ? ' <span style="color:var(--gold); font-size:9px">(E)</span>' : '';
         return `
           <div class="inv-item" data-key="${item.invKey}">
             <span class="inv-item-key">${item.invKey}</span>
             <div>
-              <div class="inv-item-name">${countStr}${item.name}</div>
+              <div class="inv-item-name">${countStr}${item.name}${eqStr}</div>
               <div class="inv-item-desc">${item.desc || ''}</div>
             </div>
           </div>
@@ -196,7 +306,7 @@ export class UIManager {
       invEl.querySelectorAll('.inv-item').forEach(el => {
         el.addEventListener('click', () => {
           const key = el.dataset.key;
-          modal.classList.add('hidden');
+          this.closeInventory();
           if (onUse) onUse(key);
         });
       });
@@ -206,7 +316,7 @@ export class UIManager {
 
     // Close button
     document.getElementById('close-inventory').onclick = () => {
-      modal.classList.add('hidden');
+      this.closeInventory();
     };
   }
 

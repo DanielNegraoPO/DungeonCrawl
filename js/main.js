@@ -174,6 +174,7 @@ document.getElementById('btn-start-adventure').addEventListener('click', () => {
   setTimeout(() => {
     if (engine) engine.stop();
     engine = new GameEngine();
+    window.engine = engine;
     engine.init(p1Config, p2Config);
   }, 100);
 });

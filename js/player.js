@@ -4,6 +4,7 @@
 import { RACES, JOBS, ARMOUR_TYPES, WEAPON_TYPES, SPELLS } from './data.js';
 import { checkLevelUp, getXPForLevel } from './combat.js';
 import { rng } from './rng.js';
+import { identifiedPotions, identifiedScrolls, identifyItem } from './items.js';
 
 export class Player {
   constructor(config) {
@@ -49,11 +50,11 @@ export class Player {
     this.armour = null;
     this.shield = null;
 
-    // Equip starting gear
-    this._equipStartingGear();
-
     // Inventory (52 slots, a-Z)
     this.inventory = [];
+
+    // Equip starting gear
+    this._equipStartingGear();
 
     // Spells
     this.knownSpells = [];
@@ -106,7 +107,7 @@ export class Player {
 
     // Starting ammo
     if (job.startMissiles) {
-      this.inventory.push({
+      this.addToInventory({
         type: 'arrows', name: 'Flechas', count: job.startMissiles,
         desc: `${job.startMissiles} flechas`
       });
@@ -139,6 +140,21 @@ export class Player {
     this.speed = this.baseSpeed;
     if (this.hasted > 0)  this.speed = Math.ceil(this.speed * 0.67);
     if (this.slowed > 0)  this.speed = Math.floor(this.speed * 1.5);
+
+    // Update identified status for items in inventory
+    if (this.inventory) {
+      this.inventory.forEach(item => {
+        if (item.type === 'potion' && !item.identified && identifiedPotions.has(item.effectId)) {
+          item.identified = true;
+          item.name = item.trueName;
+          item.desc = `Beber para ${item.trueName.toLowerCase()}`;
+        } else if (item.type === 'scroll' && !item.identified && identifiedScrolls.has(item.effectId)) {
+          item.identified = true;
+          item.name = item.trueName;
+          item.desc = item.trueName;
+        }
+      });
+    }
   }
 
   getActionCost(action = 'move') {
@@ -254,6 +270,10 @@ export class Player {
     let result = null;
 
     if (item.type === 'potion' || item.type === 'scroll') {
+      if (!item.identified) {
+        identifyItem(item);
+      }
+
       if (item.type === 'potion') {
         result = this._usePotion(item);
       } else {
@@ -270,6 +290,7 @@ export class Player {
       result = this._equipItem(item, idx);
     }
 
+    this.recalcStats();
     return result;
   }
 

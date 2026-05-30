@@ -10,7 +10,7 @@ import { Renderer, TILE_SIZE } from './renderer.js';
 import { UIManager } from './ui.js';
 import { computeLOS } from './los.js';
 import { resolveMelee, resolveSpell, applyStatusEffect } from './combat.js';
-import { placeItems, initItemSystem } from './items.js';
+import { placeItems, initItemSystem, identifyItem } from './items.js';
 import { FEATURES } from './data.js';
 import { rng } from './rng.js';
 
@@ -30,7 +30,7 @@ const P1_MOVE_KEYS = {
   // Wait
   'KeyT': [0,0], 'Period': [0,0],
 };
-const P1_ACTION_KEYS = ['KeyG','KeyI','KeyZ'];
+const P1_ACTION_KEYS = ['KeyG','KeyI','KeyZ','KeyV'];
 
 const P2_MOVE_KEYS = {
   // Arrow keys
@@ -69,6 +69,7 @@ export class GameEngine {
   }
 
   init(p1Config, p2Config) {
+    window.engine = this;
     window.removeEventListener('keydown', this._boundKeyDown);
 
     // Generate dungeon
@@ -336,13 +337,69 @@ export class GameEngine {
   // INPUT HANDLING
   // =============================================
   _onKeyDown(e) {
-    if (!this.running || !this.waitingForInput) return;
+    if (!this.running) return;
 
     // Escape/modal check
     const inventoryModal = document.getElementById('inventory-modal');
     const spellModal = document.getElementById('spell-modal');
-    if (inventoryModal && !inventoryModal.classList.contains('hidden')) return;
+
+    if (inventoryModal && !inventoryModal.classList.contains('hidden')) {
+      // Escape or KeyI (for P1) or NumpadDivide / Slash (for P2) closes inventory
+      const isCloseKey = e.code === 'Escape' || 
+                         (e.code === 'KeyI') || 
+                         (e.code === 'Slash' || e.code === 'NumpadDivide');
+      if (isCloseKey) {
+        e.preventDefault();
+        this.ui.closeInventory();
+        return;
+      }
+      
+      // If a single letter key is pressed, check if it selects an item in the active player's inventory
+      if (this.ui.inventoryOpen && this.ui.activeInventoryPlayer && this.waitingForInput) {
+        const player = this.ui.activeInventoryPlayer;
+        const key = e.key; // e.g. 'a', 'b', 'A'
+        const item = player.inventory.find(i => i.invKey === key);
+        if (item) {
+          e.preventDefault();
+          const callback = this.ui.activeInventoryCallback;
+          this.ui.closeInventory();
+          if (callback) {
+            callback(item.invKey);
+          }
+        }
+      }
+      return;
+    }
+
     if (spellModal && !spellModal.classList.contains('hidden')) return;
+
+    // --- FREE ACTION PICKUP: Intercept pickup keys at any time (even when not their turn to walk!) ---
+    // P1: G or KeyG
+    if (e.code === 'KeyG' || e.key.toLowerCase() === 'g') {
+      const p1 = this.players[0];
+      if (p1 && !p1.isDead) {
+        const ok = this._playerPickup(p1);
+        if (ok) {
+          e.preventDefault();
+          this._renderHUDs();
+          return;
+        }
+      }
+    }
+    // P2: 0 or Numpad0 or Digit0
+    if (e.code === 'Numpad0' || e.code === 'Digit0' || e.key === '0') {
+      const p2 = this.players[1];
+      if (p2 && !p2.isDead) {
+        const ok = this._playerPickup(p2);
+        if (ok) {
+          e.preventDefault();
+          this._renderHUDs();
+          return;
+        }
+      }
+    }
+
+    if (!this.waitingForInput) return;
 
     // Get active player
     const active = this.turnMgr.getActivePlayer();
@@ -360,10 +417,10 @@ export class GameEngine {
 
     if (pIdx === 0) {
       dir = P1_MOVE_KEYS[e.code];
-      isP1Key = (dir !== undefined) || P1_ACTION_KEYS.includes(e.code);
+      isP1Key = (dir !== undefined) || P1_ACTION_KEYS.includes(e.code) || ['g', 'i', 'z', 'v'].includes(e.key.toLowerCase());
     } else {
       dir = P2_MOVE_KEYS[e.code];
-      isP2Key = (dir !== undefined) || P2_ACTION_KEYS.includes(e.code);
+      isP2Key = (dir !== undefined) || P2_ACTION_KEYS.includes(e.code) || ['0', '/', '-', 'enter'].includes(e.key.toLowerCase());
     }
 
     // Also allow the other player's movement keys to work for fallback
@@ -393,20 +450,14 @@ export class GameEngine {
 
     // --- Action keys (P1) ---
     if (pIdx === 0) {
-      // G = pick up
-      if (e.code === 'KeyG') {
-        e.preventDefault();
-        const ok = this._playerPickup(p);
-        handled = ok; // Only consume turn if pickup succeeded
-      }
       // I = inventory
-      else if (e.code === 'KeyI') {
+      if (e.code === 'KeyI' || e.key.toLowerCase() === 'i') {
         e.preventDefault();
         this.ui.openInventory(p, (key) => this._playerUseItem(p, key));
         return; // no turn consumed
       }
       // Z = cast spell
-      else if (e.code === 'KeyZ') {
+      else if (e.code === 'KeyZ' || e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (p.knownSpells && p.knownSpells.length > 0) {
           this.ui.openSpellMenu(p, (spell) => this._playerCastSpell(p, spell));
@@ -415,8 +466,8 @@ export class GameEngine {
         }
         return;
       }
-      // D = drop item
-      else if (e.code === 'KeyD') {
+      // V = drop item
+      else if (e.code === 'KeyV' || e.key.toLowerCase() === 'v') {
         e.preventDefault();
         this.ui.openInventory(p, (key) => this._playerDropItem(p, key), 'Soltar');
         return;
@@ -425,20 +476,14 @@ export class GameEngine {
 
     // --- Action keys (P2) ---
     if (pIdx === 1) {
-      // Numpad0 or G = pick up
-      if (e.code === 'Numpad0' || e.code === 'NumpadDecimal' || e.code === 'KeyG') {
-        e.preventDefault();
-        const ok = this._playerPickup(p);
-        handled = ok;
-      }
-      // NumpadDivide or Slash or I = inventory
-      else if (e.code === 'NumpadDivide' || e.code === 'Slash' || e.code === 'KeyI') {
+      // NumpadDivide or Slash or / = inventory
+      if (e.code === 'NumpadDivide' || e.code === 'Slash' || e.key === '/') {
         e.preventDefault();
         this.ui.openInventory(p, (key) => this._playerUseItem(p, key));
         return;
       }
-      // NumpadEnter or Z = cast spell
-      else if (e.code === 'NumpadEnter' || e.code === 'KeyZ') {
+      // NumpadEnter or Enter = cast spell
+      else if (e.code === 'NumpadEnter' || e.key === 'Enter') {
         e.preventDefault();
         if (p.knownSpells && p.knownSpells.length > 0) {
           this.ui.openSpellMenu(p, (spell) => this._playerCastSpell(p, spell));
@@ -447,8 +492,8 @@ export class GameEngine {
         }
         return;
       }
-      // NumpadSubtract or D = drop item
-      else if (e.code === 'NumpadSubtract' || e.code === 'KeyD') {
+      // NumpadSubtract or - = drop item
+      else if (e.code === 'NumpadSubtract' || e.key === '-') {
         e.preventDefault();
         this.ui.openInventory(p, (key) => this._playerDropItem(p, key), 'Soltar');
         return;
@@ -559,12 +604,53 @@ export class GameEngine {
     const result = player.useItem(key);
     if (result) {
       if (result.msg) this.ui.addMessage(result.msg, result.type || 'info', player.playerIndex);
-      if (result.effect === 'teleport') this._teleportPlayer(player);
+      
+      // Handle scroll / potion effects
+      if (result.effect === 'teleport') {
+        this._teleportPlayer(player);
+      } else if (result.effect === 'enchant_weapon') {
+        if (player.weapon) {
+          player.weapon.enchant = (player.weapon.enchant || 0) + 1;
+          const baseName = player.weapon.name.split(' +')[0].split(' (amaldi')[0];
+          player.weapon.name = `${baseName} +${player.weapon.enchant}`;
+          this.ui.addMessage(`Sua ${baseName} brilha intensamente! (+${player.weapon.enchant} de encantamento)`, 'good', player.playerIndex);
+          this.renderer.addFlash(player.x, player.y, '#ffffff', 15);
+          player.recalcStats();
+        } else {
+          this.ui.addMessage('Você sente magia em suas mãos, mas não tem nenhuma arma equipada para encantar.', 'info', player.playerIndex);
+        }
+      } else if (result.effect === 'fog') {
+        this.ui.addMessage('Uma névoa espessa se espalha ao seu redor, obstruindo a visão!', 'system', player.playerIndex);
+        // Visual fog flash effect
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            if (Math.abs(dx) + Math.abs(dy) <= 3) {
+              this.renderer.addFlash(player.x + dx, player.y + dy, '#e0e0e0', 8 + rng.int(0, 8));
+            }
+          }
+        }
+      } else if (result.effect === 'identify') {
+        this.ui.addMessage('Selecione um item no inventário para identificar.', 'info', player.playerIndex);
+        setTimeout(() => {
+          this.ui.openInventory(player, (targetKey) => this._playerIdentifyItem(player, targetKey), 'Identificar');
+        }, 100);
+      }
+
       const cost = player.getActionCost('item');
       this.turnMgr.advance();
       this.turnMgr.actorDone(player, cost);
       this.waitingForInput = false;
       this._updateLOS();
+    }
+  }
+
+  _playerIdentifyItem(player, targetKey) {
+    const item = player.inventory.find(i => i.invKey === targetKey);
+    if (item) {
+      const oldUnidName = item.name;
+      identifyItem(item);
+      this.ui.addMessage(`Você identificou ${oldUnidName} como ${item.trueName || item.name}!`, 'good', player.playerIndex);
+      player.recalcStats();
     }
   }
 

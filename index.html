@@ -161,6 +161,8 @@
           <div class="bar-label">MP</div>
           <div class="bar-container"><div class="bar mp-bar" id="mp-bar-p1"></div><span class="bar-text" id="mp-text-p1">4/4</span></div>
         </div>
+
+        <div class="hud-ground-item hidden" id="ground-item-section-p1"></div>
         <div class="hud-stats" id="hud-stats-p1">
           <div class="stat-row"><span class="stat-label">STR</span><span class="stat-val" id="str-p1">10</span></div>
           <div class="stat-row"><span class="stat-label">INT</span><span class="stat-val" id="int-p1">10</span></div>
@@ -178,6 +180,10 @@
         <div class="hud-spells" id="spells-p1">
           <div class="status-header">Feitiços</div>
           <div class="spell-list" id="spell-list-p1"></div>
+        </div>
+        <div class="hud-inventory" id="inventory-section-p1">
+          <div class="status-header">Inventário <span class="open-inv-btn" id="open-inv-btn-p1">📂 abrir</span></div>
+          <div class="spell-list" id="inventory-list-p1"></div>
         </div>
         <div class="death-overlay p1-dead" id="dead-overlay-p1">
           <div class="ghost-icon">👻</div>
@@ -215,6 +221,8 @@
           <div class="bar-label">MP</div>
           <div class="bar-container"><div class="bar mp-bar" id="mp-bar-p2"></div><span class="bar-text" id="mp-text-p2">4/4</span></div>
         </div>
+
+        <div class="hud-ground-item hidden" id="ground-item-section-p2"></div>
         <div class="hud-stats" id="hud-stats-p2">
           <div class="stat-row"><span class="stat-label">STR</span><span class="stat-val" id="str-p2">10</span></div>
           <div class="stat-row"><span class="stat-label">INT</span><span class="stat-val" id="int-p2">10</span></div>
@@ -232,6 +240,10 @@
         <div class="hud-spells" id="spells-p2">
           <div class="status-header">Feitiços</div>
           <div class="spell-list" id="spell-list-p2"></div>
+        </div>
+        <div class="hud-inventory" id="inventory-section-p2">
+          <div class="status-header">Inventário <span class="open-inv-btn" id="open-inv-btn-p2">📂 abrir</span></div>
+          <div class="spell-list" id="inventory-list-p2"></div>
         </div>
         <div class="death-overlay p2-dead" id="dead-overlay-p2">
           <div class="ghost-icon">👻</div>
@@ -252,6 +264,7 @@
           <div id="equipment-panel">
             <h4>Equipado</h4>
             <div id="equipment-slots"></div>
+            <div class="inventory-gold" id="inventory-gold-display">💰 Ouro: 0</div>
           </div>
           <div id="inventory-list"></div>
         </div>

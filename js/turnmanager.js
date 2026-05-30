@@ -56,17 +56,38 @@ export class TurnManager {
     }
   }
 
-  // Get upcoming actors for display
+  // Get upcoming actors for display with future simulation look-ahead
   getUpcoming(count = 8) {
-    return [...this.queue]
+    if (this.queue.length === 0) return [];
+    
+    // Copy active actors and their current AUT schedule times
+    const simQueue = this.queue
       .filter(e => !e.actor.isDead)
-      .sort((a, b) => {
+      .map(e => ({ actor: e.actor, time: e.time }));
+
+    if (simQueue.length === 0) return [];
+
+    const upcoming = [];
+    for (let step = 0; step < count; step++) {
+      // Sort priority queue to find the next actor to act
+      simQueue.sort((a, b) => {
         if (a.time !== b.time) return a.time - b.time;
+        // Tie-breaker: players act first
         const aP = a.actor.isPlayer ? 0 : 1;
         const bP = b.actor.isPlayer ? 0 : 1;
         return aP - bP;
-      })
-      .slice(0, count);
+      });
+
+      const nextEntry = simQueue[0];
+      upcoming.push({ actor: nextEntry.actor, time: nextEntry.time });
+
+      // Advance this simulated actor's next action time in the look-ahead timeline
+      // using their speed (AUT cost of a standard move)
+      const cost = nextEntry.actor.getActionCost ? nextEntry.actor.getActionCost('move') : 10;
+      nextEntry.time += Math.max(1, cost);
+    }
+
+    return upcoming;
   }
 
   cleanDead() {

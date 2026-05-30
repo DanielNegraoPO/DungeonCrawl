@@ -626,12 +626,61 @@ html, body {
   font-weight: bold;
 }
 
-.hud-status, .hud-spells {
+.hud-status, .hud-spells, .hud-inventory {
   padding: 8px;
   border-bottom: 1px solid var(--border);
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+.open-inv-btn {
+  font-size: 9px;
+  background: rgba(201, 168, 76, 0.15);
+  color: var(--gold);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  float: right;
+  transition: all 0.2s ease;
+  font-family: 'Cinzel', serif;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.open-inv-btn:hover {
+  background: var(--gold);
+  color: #0a0a0f;
+  box-shadow: 0 0 8px rgba(201, 168, 76, 0.4);
+}
+
+.hud-inv-button-container {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+
+.hud-inv-btn {
+  width: 100%;
+  padding: 6px 12px;
+  background: rgba(201, 168, 76, 0.1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--gold);
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.5px;
+}
+
+.hud-inv-btn:hover {
+  background: var(--gold);
+  color: #0a0a0f;
+  box-shadow: 0 0 10px rgba(201, 168, 76, 0.3);
 }
 
 .status-header {
@@ -992,3 +1041,60 @@ html, body {
    UTILITY
    ========================================= */
 .hidden { display: none !important; }
+
+/* =========================================
+   GROUND ITEM PICKUP BUTTONS
+   ========================================= */
+.hud-ground-item {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+.hud-pickup-btn {
+  width: 100%;
+  padding: 6px 12px;
+  background: rgba(80, 200, 112, 0.15);
+  border: 1px solid rgba(80, 200, 112, 0.4);
+  border-radius: 4px;
+  color: #50c870;
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+.hud-pickup-btn:hover {
+  background: #50c870;
+  color: #0a0a0f;
+  box-shadow: 0 0 10px rgba(80, 200, 112, 0.5);
+}
+.hud-pickup-btn.gold {
+  background: rgba(201, 168, 76, 0.15);
+  border-color: rgba(201, 168, 76, 0.4);
+  color: var(--gold);
+}
+.hud-pickup-btn.gold:hover {
+  background: var(--gold);
+  color: #0a0a0f;
+  box-shadow: 0 0 10px rgba(201, 168, 76, 0.5);
+
+/* =========================================
+   INVENTORY GOLD DISPLAY
+   ========================================= */
+.inventory-gold {
+  margin-top: 15px;
+  padding: 8px;
+  background: rgba(201, 168, 76, 0.15);
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  color: var(--gold);
+  font-family: 'Cinzel', serif;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

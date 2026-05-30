@@ -114,8 +114,8 @@ const WEAPON_IDS = ['dagger', 'short_sword', 'mace', 'hand_axe', 'spear', 'short
 const ARMOUR_IDS = ['robe', 'leather', 'ring_mail', 'chain_mail'];
 
 // Per-game identification state (shared for both players)
-const identifiedPotions  = new Set();
-const identifiedScrolls  = new Set();
+export const identifiedPotions  = new Set();
+export const identifiedScrolls  = new Set();
 let potionNameMap  = {};
 let potionSpriteMap = {};
 let scrollNameMap  = {};
