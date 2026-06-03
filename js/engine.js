@@ -13,6 +13,7 @@ import { resolveMelee, resolveSpell, applyStatusEffect } from './combat.js';
 import { placeItems, initItemSystem, identifyItem } from './items.js';
 import { FEATURES } from './data.js';
 import { rng } from './rng.js';
+import { db, tx } from './db.js'; // Import InstantDB
 
 // =============================================
 // DCSS-faithful key bindings (split by player)
@@ -30,7 +31,7 @@ const P1_MOVE_KEYS = {
   // Wait
   'KeyT': [0,0], 'Period': [0,0],
 };
-const P1_ACTION_KEYS = ['KeyG','KeyI','KeyZ','KeyV'];
+const P1_ACTION_KEYS = ['KeyG','KeyI','KeyZ','KeyV','KeyD'];
 
 const P2_MOVE_KEYS = {
   // Arrow keys
@@ -43,7 +44,7 @@ const P2_MOVE_KEYS = {
   // Wait
   'Numpad5': [0,0], 'Clear': [0,0],
 };
-const P2_ACTION_KEYS = ['Numpad0', 'NumpadDecimal', 'NumpadDivide', 'NumpadEnter', 'Slash'];
+const P2_ACTION_KEYS = ['Numpad0', 'NumpadDecimal', 'NumpadDivide', 'NumpadEnter', 'Slash', 'NumpadSubtract'];
 
 export class GameEngine {
   constructor() {
@@ -64,13 +65,28 @@ export class GameEngine {
     this.waitingForInput = false;
     this._lastAction = 'move';
 
+    // Multiplayer Sync Variables
+    this.networkConfig = null;
+    this.actionQueue = [];
+    this.nextActionIndex = 1;
+    this.dbUnsubscribe = null;
+
     this.canvas = document.getElementById('game-canvas');
     this._boundKeyDown = this._onKeyDown.bind(this);
   }
 
-  init(p1Config, p2Config) {
+  init(p1Config, p2Config, networkConfig = null) {
+    this.networkConfig = networkConfig;
+
     window.engine = this;
     window.removeEventListener('keydown', this._boundKeyDown);
+
+    // Apply seed for determinism
+    if (this.networkConfig && this.networkConfig.seed) {
+      rng.seed = this.networkConfig.seed;
+    } else {
+      rng.seed = Date.now();
+    }
 
     // Generate dungeon
     const gen = new DungeonGenerator();
@@ -124,6 +140,17 @@ export class GameEngine {
 
     // Start
     this.running = true;
+    
+    if (this.networkConfig) {
+      this.dbUnsubscribe = db.subscribeQuery({ rooms: {} }, (resp) => {
+        if (!resp.data || !resp.data.rooms) return;
+        const myRoom = resp.data.rooms.find(r => r.id === this.networkConfig.roomId);
+        if (myRoom && myRoom.actions) {
+          this._processNetworkActions(myRoom.actions);
+        }
+      });
+    }
+
     this.waitingForInput = true;
     window.addEventListener('keydown', this._boundKeyDown);
 
@@ -331,6 +358,66 @@ export class GameEngine {
         this.turnMgr.removeActor(defender);
       }
     }
+  _processNetworkActions(actionsMap) {
+    if (!actionsMap) return;
+    while (actionsMap[this.nextActionIndex]) {
+      const action = actionsMap[this.nextActionIndex];
+      this._isSimulating = true;
+      const p = this.players[action.pIdx];
+      
+      let handled = false;
+      let cost = 10;
+
+      switch (action.type) {
+        case 'moveOrAttack': 
+          handled = this._playerMoveOrAttack(p, action.payload.dx, action.payload.dy); 
+          if (handled) cost = p.getActionCost(this._lastAction || 'move');
+          break;
+        case 'wait': 
+          this._playerWait(p); 
+          handled = true;
+          cost = p.getActionCost('wait');
+          break;
+        case 'pickup': 
+          handled = this._playerPickup(p); 
+          if (handled) cost = p.getActionCost('pickup');
+          break;
+        case 'useItem': 
+          this._playerUseItem(p, action.payload.key); 
+          handled = false; // _playerUseItem advances turn internally
+          break;
+        case 'dropItem': 
+          this._playerDropItem(p, action.payload.key); 
+          handled = false; // internally handles turn
+          break;
+        case 'castSpell': 
+          this._playerCastSpell(p, action.payload.spell); 
+          handled = false; // internally handles turn
+          break;
+      }
+
+      if (handled) {
+        this.turnMgr.advance();
+        this.turnMgr.actorDone(p, cost);
+        this.waitingForInput = false;
+        p.tick();
+        this._updateLOS();
+      }
+
+      this._isSimulating = false;
+      this.nextActionIndex++;
+      this._renderHUDs(); // Ensure UI updates after DB sync
+    }
+  }
+
+  sendAction(type, payload) {
+    if (!this.networkConfig) return;
+    const active = this.turnMgr.getActivePlayer();
+    if (!active) return;
+    const action = { type, payload, pIdx: active.playerIndex };
+    const updateObj = {};
+    updateObj[`actions.${this.nextActionIndex}`] = action;
+    db.transact([tx.rooms[this.networkConfig.roomId].update(updateObj)]);
   }
 
   // =============================================
@@ -339,12 +426,10 @@ export class GameEngine {
   _onKeyDown(e) {
     if (!this.running) return;
 
-    // Escape/modal check
     const inventoryModal = document.getElementById('inventory-modal');
     const spellModal = document.getElementById('spell-modal');
 
     if (inventoryModal && !inventoryModal.classList.contains('hidden')) {
-      // Escape or KeyI (for P1) or NumpadDivide / Slash (for P2) closes inventory
       const isCloseKey = e.code === 'Escape' || 
                          (e.code === 'KeyI') || 
                          (e.code === 'Slash' || e.code === 'NumpadDivide');
@@ -353,19 +438,15 @@ export class GameEngine {
         this.ui.closeInventory();
         return;
       }
-      
-      // If a single letter key is pressed, check if it selects an item in the active player's inventory
       if (this.ui.inventoryOpen && this.ui.activeInventoryPlayer && this.waitingForInput) {
         const player = this.ui.activeInventoryPlayer;
-        const key = e.key; // e.g. 'a', 'b', 'A'
+        const key = e.key;
         const item = player.inventory.find(i => i.invKey === key);
         if (item) {
           e.preventDefault();
           const callback = this.ui.activeInventoryCallback;
           this.ui.closeInventory();
-          if (callback) {
-            callback(item.invKey);
-          }
+          if (callback) callback(item.invKey);
         }
       }
       return;
@@ -373,146 +454,115 @@ export class GameEngine {
 
     if (spellModal && !spellModal.classList.contains('hidden')) return;
 
-    // --- FREE ACTION PICKUP: Intercept pickup keys at any time (even when not their turn to walk!) ---
-    // P1: G or KeyG
-    if (e.code === 'KeyG' || e.key.toLowerCase() === 'g') {
-      const p1 = this.players[0];
-      if (p1 && !p1.isDead) {
-        const ok = this._playerPickup(p1);
-        if (ok) {
-          e.preventDefault();
-          this._renderHUDs();
-          return;
-        }
-      }
-    }
-    // P2: 0 or Numpad0 or Digit0
-    if (e.code === 'Numpad0' || e.code === 'Digit0' || e.key === '0') {
-      const p2 = this.players[1];
-      if (p2 && !p2.isDead) {
-        const ok = this._playerPickup(p2);
-        if (ok) {
-          e.preventDefault();
-          this._renderHUDs();
-          return;
-        }
-      }
-    }
-
     if (!this.waitingForInput) return;
-
-    // Get active player
     const active = this.turnMgr.getActivePlayer();
     if (!active) return;
 
-    const p = active;
-    const pIdx = p.playerIndex;
+    const pIdx = active.playerIndex;
 
-    // --- Determine which key set to use ---
-    // P1 uses P1_MOVE_KEYS, P2 uses P2_MOVE_KEYS
-    // BUT: allow any movement if the player is active
-    let dir = null;
-    let isP1Key = false;
-    let isP2Key = false;
-
-    if (pIdx === 0) {
-      dir = P1_MOVE_KEYS[e.code];
-      isP1Key = (dir !== undefined) || P1_ACTION_KEYS.includes(e.code) || ['g', 'i', 'z', 'v'].includes(e.key.toLowerCase());
-    } else {
-      dir = P2_MOVE_KEYS[e.code];
-      isP2Key = (dir !== undefined) || P2_ACTION_KEYS.includes(e.code) || ['0', '/', '-', 'enter'].includes(e.key.toLowerCase());
+    // MULTIPLAYER LOCK: Only allow input if this client controls the active player
+    if (this.networkConfig) {
+      const isMyTurn = (pIdx === 0 && this.networkConfig.isHost) || (pIdx === 1 && !this.networkConfig.isHost);
+      if (!isMyTurn) return; // Wait for network action
     }
 
-    // Also allow the other player's movement keys to work for fallback
-    // (helpful if user plays solo or keys are confused)
-    if (dir === null) {
-      if (pIdx === 0) dir = P2_MOVE_KEYS[e.code]; // fallback P2 keys for P1
-      else dir = P1_MOVE_KEYS[e.code];              // fallback P1 keys for P2
+    // --- Action keys (free pickup hack removed to enforce turn order) ---
+    let dir = null;
+    if (pIdx === 0) {
+      dir = P1_MOVE_KEYS[e.code];
+      if (!dir) dir = P2_MOVE_KEYS[e.code]; // fallback
+    } else {
+      dir = P2_MOVE_KEYS[e.code];
+      if (!dir) dir = P1_MOVE_KEYS[e.code]; // fallback
     }
 
     let handled = false;
 
-    // Movement / attack
     if (dir !== null) {
       e.preventDefault();
       const [dx, dy] = dir;
       if (dx === 0 && dy === 0) {
-        this._playerWait(p);
+        if (this.networkConfig && !this._isSimulating) { this.sendAction('wait', null); return; }
+        this._playerWait(active);
         handled = true;
       } else {
-        handled = this._playerMoveOrAttack(p, dx, dy);
-        if (!handled) {
-          // Bump into wall - no turn consumed
-          this.ui.addMessage('Bloqueado.', 'normal', pIdx);
-        }
+        if (this.networkConfig && !this._isSimulating) { this.sendAction('moveOrAttack', { dx, dy }); return; }
+        handled = this._playerMoveOrAttack(active, dx, dy);
+        if (!handled) this.ui.addMessage('Bloqueado.', 'normal', pIdx);
       }
     }
 
-    // --- Action keys (P1) ---
     if (pIdx === 0) {
-      // I = inventory
-      if (e.code === 'KeyI' || e.key.toLowerCase() === 'i') {
+      if (e.code === 'KeyG' || e.key.toLowerCase() === 'g') {
+        if (this.networkConfig && !this._isSimulating) { this.sendAction('pickup', null); return; }
+        handled = this._playerPickup(active);
+      } else if (e.code === 'KeyI' || e.key.toLowerCase() === 'i') {
         e.preventDefault();
-        this.ui.openInventory(p, (key) => this._playerUseItem(p, key));
-        return; // no turn consumed
-      }
-      // Z = cast spell
-      else if (e.code === 'KeyZ' || e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        if (p.knownSpells && p.knownSpells.length > 0) {
-          this.ui.openSpellMenu(p, (spell) => this._playerCastSpell(p, spell));
-        } else {
-          this.ui.addMessage('Você não conhece nenhum feitiço.', 'warn', pIdx);
-        }
+        this.ui.openInventory(active, (key) => {
+          if (this.networkConfig && !this._isSimulating) { this.sendAction('useItem', { key }); return; }
+          this._playerUseItem(active, key);
+        });
         return;
-      }
-      // V = drop item
-      else if (e.code === 'KeyV' || e.key.toLowerCase() === 'v') {
+      } else if (e.code === 'KeyZ' || e.key.toLowerCase() === 'z') {
         e.preventDefault();
-        this.ui.openInventory(p, (key) => this._playerDropItem(p, key), 'Soltar');
+        if (active.knownSpells && active.knownSpells.length > 0) {
+          this.ui.openSpellMenu(active, (spell) => {
+            if (this.networkConfig && !this._isSimulating) { this.sendAction('castSpell', { spell }); return; }
+            this._playerCastSpell(active, spell);
+          });
+        }
+        else this.ui.addMessage('Você não conhece nenhum feitiço.', 'warn', pIdx);
+        return;
+      } else if (e.code === 'KeyD' || e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        this.ui.openInventory(active, (key) => {
+          if (this.networkConfig && !this._isSimulating) { this.sendAction('dropItem', { key }); return; }
+          this._playerDropItem(active, key);
+        }, 'Soltar');
         return;
       }
     }
 
-    // --- Action keys (P2) ---
     if (pIdx === 1) {
-      // NumpadDivide or Slash or / = inventory
-      if (e.code === 'NumpadDivide' || e.code === 'Slash' || e.key === '/') {
+      if (e.code === 'Numpad0' || e.code === 'Digit0' || e.key === '0') {
+        if (this.networkConfig && !this._isSimulating) { this.sendAction('pickup', null); return; }
+        handled = this._playerPickup(active);
+      } else if (e.code === 'NumpadDivide' || e.code === 'Slash' || e.key === '/') {
         e.preventDefault();
-        this.ui.openInventory(p, (key) => this._playerUseItem(p, key));
+        this.ui.openInventory(active, (key) => {
+          if (this.networkConfig && !this._isSimulating) { this.sendAction('useItem', { key }); return; }
+          this._playerUseItem(active, key);
+        });
         return;
-      }
-      // NumpadEnter or Enter = cast spell
-      else if (e.code === 'NumpadEnter' || e.key === 'Enter') {
+      } else if (e.code === 'NumpadEnter' || e.key === 'Enter') {
         e.preventDefault();
-        if (p.knownSpells && p.knownSpells.length > 0) {
-          this.ui.openSpellMenu(p, (spell) => this._playerCastSpell(p, spell));
-        } else {
-          this.ui.addMessage('Você não conhece nenhum feitiço.', 'warn', pIdx);
+        if (active.knownSpells && active.knownSpells.length > 0) {
+          this.ui.openSpellMenu(active, (spell) => {
+            if (this.networkConfig && !this._isSimulating) { this.sendAction('castSpell', { spell }); return; }
+            this._playerCastSpell(active, spell);
+          });
         }
+        else this.ui.addMessage('Você não conhece nenhum feitiço.', 'warn', pIdx);
         return;
-      }
-      // NumpadSubtract or - = drop item
-      else if (e.code === 'NumpadSubtract' || e.key === '-') {
+      } else if (e.code === 'NumpadSubtract' || e.key === '-') {
         e.preventDefault();
-        this.ui.openInventory(p, (key) => this._playerDropItem(p, key), 'Soltar');
+        this.ui.openInventory(active, (key) => {
+          if (this.networkConfig && !this._isSimulating) { this.sendAction('dropItem', { key }); return; }
+          this._playerDropItem(active, key);
+        }, 'Soltar');
         return;
       }
     }
 
-    if (handled) {
-      // Consume turn
-      const cost = p.getActionCost(this._lastAction || 'move');
+    if (handled && !this.networkConfig) { // Only advance locally if not networked
+      const cost = active.getActionCost(this._lastAction || 'move');
       this.turnMgr.advance();
-      this.turnMgr.actorDone(p, cost);
+      this.turnMgr.actorDone(active, cost);
       this.waitingForInput = false;
-
-      // Tick player status effects
-      p.tick();
+      active.tick();
       this._updateLOS();
     }
   }
-
 
   _playerMoveOrAttack(player, dx, dy) {
     const nx = player.x + dx;

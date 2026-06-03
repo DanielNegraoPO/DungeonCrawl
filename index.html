@@ -29,6 +29,25 @@
       <div class="title-version">DCSS Multiplayer v0.1 — D:1 Demo</div>
     </div>
   </div>
+  <div id="screen-lobby" class="screen">
+    <div class="howto-panel" style="max-width: 600px;">
+      <h2>Salas de Jogo Multiplayer</h2>
+      <div id="lobby-status" style="margin-bottom: 10px; color: #ffaa00;">Conectando ao InstantDB...</div>
+      
+      <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+        <input type="text" id="room-name-input" placeholder="Nome da Sala" style="flex: 1; padding: 10px; background: #222; color: white; border: 1px solid #444;">
+        <button id="btn-create-room" class="menu-btn primary" style="margin: 0;">Criar Sala</button>
+      </div>
+
+      <div class="mechanic-info">
+        <h3>Salas Disponíveis</h3>
+        <ul id="rooms-list" style="list-style: none; padding: 0; min-height: 150px;">
+          <!-- Rooms will be injected here -->
+        </ul>
+      </div>
+      <button id="btn-lobby-back" class="menu-btn secondary" style="margin-top: 20px;">← Voltar</button>
+    </div>
+  </div>
 
   <div id="screen-howto" class="screen">
     <div class="howto-panel">
@@ -93,7 +112,8 @@
       <div class="char-create-grid">
         <!-- Player 1 -->
         <div class="char-slot player1-slot">
-          <div class="player-header p1">🔴 JOGADOR 1</div>
+          <div class="player-header p1">🔴 JOGADOR 1 (Host)</div>
+          <div id="p1-status" style="color: #ffaa00; text-align: center; margin-bottom: 10px;">Aguardando...</div>
           <div class="char-section">
             <label>Nome</label>
             <input type="text" id="p1-name" placeholder="Nome do herói..." maxlength="20">
@@ -116,7 +136,8 @@
 
         <!-- Player 2 -->
         <div class="char-slot player2-slot">
-          <div class="player-header p2">🔵 JOGADOR 2</div>
+          <div class="player-header p2">🔵 JOGADOR 2 (Guest)</div>
+          <div id="p2-status" style="color: #ffaa00; text-align: center; margin-bottom: 10px;">Aguardando...</div>
           <div class="char-section">
             <label>Nome</label>
             <input type="text" id="p2-name" placeholder="Nome do herói..." maxlength="20">
@@ -136,8 +157,8 @@
         </div>
       </div>
       <div class="char-create-actions">
-        <button id="btn-start-adventure" class="menu-btn primary">⚔ Começar Aventura!</button>
-        <button id="btn-back-title2" class="menu-btn secondary">← Voltar</button>
+        <button id="btn-ready" class="menu-btn primary">Marcar como Pronto</button>
+        <button id="btn-leave-room" class="menu-btn secondary">Sair da Sala</button>
       </div>
     </div>
   </div>
