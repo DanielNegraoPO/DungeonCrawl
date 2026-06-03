@@ -18,7 +18,7 @@ function buildChoiceGrid(containerId, player, type, data) {
   const entries = Object.entries(data);
   for (const [id, def] of entries) {
     const btn = document.createElement('button');
-    btn.className = 'choice-btn';
+    btn.className = `choice-btn ${playerPrefix}`;
     btn.dataset.id = id;
     btn.innerHTML = `
       <div class="choice-name">${def.name}</div>
@@ -36,12 +36,6 @@ buildChoiceGrid('p2-class-grid', 'p2', 'job', JOBS);
 
 // Start Lobby
 const lobby = new Lobby((config) => {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  const gameContainer = document.getElementById('game-container');
-  if (gameContainer) {
-    gameContainer.classList.remove('hidden');
-    gameContainer.style.display = 'flex';
-  }
 
   const p1Config = { name: config.p1.name, raceId: config.p1.race, jobId: config.p1.cls };
   const p2Config = { name: config.p2.name, raceId: config.p2.race, jobId: config.p2.cls };
