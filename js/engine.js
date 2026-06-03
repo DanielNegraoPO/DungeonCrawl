@@ -358,6 +358,7 @@ export class GameEngine {
         this.turnMgr.removeActor(defender);
       }
     }
+  }
   _processNetworkActions(actionsMap) {
     if (!actionsMap) return;
     while (actionsMap[this.nextActionIndex]) {
