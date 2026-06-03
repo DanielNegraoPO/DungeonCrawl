@@ -30,10 +30,27 @@ export class Lobby {
     choices.forEach(btn => {
       btn.addEventListener('click', (e) => {
         if (!this.currentRoomId) return;
-        const type = e.currentTarget.parentElement.id.includes('race') ? 'race' : 'class';
+        
+        const parentId = e.currentTarget.parentElement.id; // e.g. p1-race-grid
+        if (this.isHost && !parentId.startsWith('p1-')) return; // Host can only edit p1
+        if (!this.isHost && !parentId.startsWith('p2-')) return; // Guest can only edit p2
+
+        const type = parentId.includes('race') ? 'race' : 'class';
         const value = e.currentTarget.dataset.id;
         this.updateSelection(type, value);
       });
+    });
+
+    document.getElementById('p1-name').addEventListener('input', (e) => {
+      if (this.currentRoomId && this.isHost) {
+        db.transact([tx.rooms[this.currentRoomId].update({ p1_name: e.target.value, p1_ready: false })]);
+      }
+    });
+
+    document.getElementById('p2-name').addEventListener('input', (e) => {
+      if (this.currentRoomId && !this.isHost) {
+        db.transact([tx.rooms[this.currentRoomId].update({ p2_name: e.target.value, p2_ready: false })]);
+      }
     });
   }
 
@@ -54,7 +71,7 @@ export class Lobby {
       const roomsList = document.getElementById('rooms-list');
       roomsList.innerHTML = '';
       
-      const availableRooms = resp.data.rooms.filter(r => r.state === 'lobby' || r.state === 'char-select');
+      const availableRooms = (resp.data.rooms || []).filter(r => r.state === 'lobby' || r.state === 'char-select');
       
       if (availableRooms.length === 0) {
         roomsList.innerHTML = '<li style="color:#aaa">Nenhuma sala disponível.</li>';
@@ -78,7 +95,7 @@ export class Lobby {
 
       // If we are currently in a room, update the char select UI
       if (this.currentRoomId) {
-        const myRoom = resp.data.rooms.find(r => r.id === this.currentRoomId);
+        const myRoom = (resp.data.rooms || []).find(r => r.id === this.currentRoomId);
         if (myRoom) {
           this.roomData = myRoom;
           this.updateCharSelectUI();
@@ -103,10 +120,12 @@ export class Lobby {
         p1_ready: false,
         p1_race: 'human',
         p1_class: 'fighter',
+        p1_name: 'Herói 1',
         p2_id: null,
         p2_ready: false,
         p2_race: 'human',
         p2_class: 'fighter',
+        p2_name: 'Herói 2',
         seed: Math.floor(Math.random() * 0xFFFFFFFF),
         actions: {} // Store actions as {"1": "KeyW", "2": "KeyA"} etc
       })
@@ -173,6 +192,14 @@ export class Lobby {
     if (!this.roomData) return;
     const rd = this.roomData;
 
+    // Sync names
+    if (rd.p1_name !== undefined) document.getElementById('p1-name').value = rd.p1_name;
+    if (rd.p2_name !== undefined) document.getElementById('p2-name').value = rd.p2_name;
+    
+    // Disable inputs for the other player
+    document.getElementById('p1-name').disabled = !this.isHost || rd.p1_ready;
+    document.getElementById('p2-name').disabled = this.isHost || rd.p2_ready;
+
     // Update statuses
     document.getElementById('p1-status').innerText = rd.p1_ready ? 'Pronto!' : 'Escolhendo...';
     document.getElementById('p1-status').style.color = rd.p1_ready ? '#55ff55' : '#ffaa00';
@@ -186,8 +213,6 @@ export class Lobby {
     }
 
     // Sync UI buttons (only visual updates, actual click is bound in bindEvents)
-    // Note: To fully sync UI, we'd highlight the selected options for both players.
-    // Assuming UI logic for highlighting is in UI.js or we can do it here.
     const highlight = (playerId, type, value) => {
       document.querySelectorAll(`#p${playerId}-${type}-grid .choice-btn`).forEach(btn => {
         if (btn.dataset.id === value) btn.classList.add('selected');
@@ -210,17 +235,18 @@ export class Lobby {
         db.transact([tx.rooms[this.currentRoomId].update({ state: 'playing' })]);
       }
       
-      this.showScreen('game-container');
+      this.showScreen('screen-game');
       
       // Call main game start
       this.onStartGame({
         roomId: this.currentRoomId,
         isHost: this.isHost,
         playerId: this.playerId,
-        p1: { name: document.getElementById('p1-name').value || 'Jogador 1', race: this.roomData.p1_race, cls: this.roomData.p1_class },
-        p2: { name: document.getElementById('p2-name').value || 'Jogador 2', race: this.roomData.p2_race, cls: this.roomData.p2_class },
+        p1: { name: this.roomData.p1_name || 'Jogador 1', race: this.roomData.p1_race, cls: this.roomData.p1_class },
+        p2: { name: this.roomData.p2_name || 'Jogador 2', race: this.roomData.p2_race, cls: this.roomData.p2_class },
         seed: this.roomData.seed
       });
     }
+  }
   }
 }
