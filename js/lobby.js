@@ -5,7 +5,15 @@ export class Lobby {
     this.onStartGame = onStartGame;
     this.currentRoomId = null;
     this.isHost = false;
-    this.playerId = id(); // Session ID for this player
+    
+    // Check local storage for persistent player ID
+    let pid = localStorage.getItem('dcss_player_id');
+    if (!pid) {
+      pid = id();
+      localStorage.setItem('dcss_player_id', pid);
+    }
+    this.playerId = pid;
+
     this.roomsSubscription = null;
     this.roomData = null;
 
@@ -66,43 +74,78 @@ export class Lobby {
         return;
       }
       
+      this.allRooms = resp.data.rooms || [];
       document.getElementById('lobby-status').innerText = 'Conectado. Escolha uma sala.';
       
       const roomsList = document.getElementById('rooms-list');
       roomsList.innerHTML = '';
       
-      const availableRooms = (resp.data.rooms || []).filter(r => r.state === 'lobby' || r.state === 'char-select');
+      const availableRooms = this.allRooms.filter(r => r.state === 'lobby' || r.state === 'char-select' || r.state === 'playing');
       
       if (availableRooms.length === 0) {
         roomsList.innerHTML = '<li style="color:#aaa">Nenhuma sala disponível.</li>';
       } else {
         availableRooms.forEach(room => {
+          const isMyRoom = (room.p1_id === this.playerId || room.p2_id === this.playerId);
+          const isHost = (room.p1_id === this.playerId);
+          
+          let btnHtml = '';
+          if (room.state === 'playing') {
+            if (isMyRoom) {
+              btnHtml = `<button class="btn-join-room reconnect" data-id="${room.id}" style="background:#228822;">Continuar</button>`;
+            } else {
+              btnHtml = `<button class="btn-join-room" disabled>Em Jogo</button>`;
+            }
+          } else {
+            if (isMyRoom) {
+               btnHtml = `<button class="btn-join-room reconnect" data-id="${room.id}" style="background:#228822;">Continuar</button>`;
+            } else {
+               btnHtml = `<button class="btn-join-room" data-id="${room.id}" ${room.p2_id ? 'disabled' : ''}>${room.p2_id ? 'Lotado' : 'Entrar'}</button>`;
+            }
+          }
+          
+          let delBtnHtml = isHost ? `<button class="btn-del-room" style="background:#cc3333; margin-left:10px;" data-id="${room.id}">Deletar</button>` : '';
+
           const li = document.createElement('li');
           li.className = 'room-item';
           li.innerHTML = `
             <div>
-              <div class="room-name">${room.name}</div>
+              <div class="room-name">${room.name} ${room.state === 'playing' ? '<span style="color:#ffaa00;font-size:10px;">[EM JOGO]</span>' : ''}</div>
               <div class="room-players">Jogadores: ${room.p2_id ? '2/2' : '1/2'}</div>
             </div>
-            <button class="btn-join-room" data-id="${room.id}" ${room.p2_id ? 'disabled' : ''}>
-              ${room.p2_id ? 'Lotado' : 'Entrar'}
-            </button>
+            <div>
+              ${btnHtml}
+              ${delBtnHtml}
+            </div>
           `;
-          li.querySelector('button').onclick = () => this.joinRoom(room.id);
+          
+          const joinBtn = li.querySelector('.btn-join-room');
+          if (joinBtn && !joinBtn.disabled) {
+            joinBtn.onclick = () => this.joinRoom(room.id, isMyRoom, room.state);
+          }
+          
+          const delBtn = li.querySelector('.btn-del-room');
+          if (delBtn) {
+             delBtn.onclick = () => this.deleteRoom(room.id);
+          }
+          
           roomsList.appendChild(li);
         });
       }
 
       // If we are currently in a room, update the char select UI
       if (this.currentRoomId) {
-        const myRoom = (resp.data.rooms || []).find(r => r.id === this.currentRoomId);
+        const myRoom = this.allRooms.find(r => r.id === this.currentRoomId);
         if (myRoom) {
           this.roomData = myRoom;
           this.updateCharSelectUI();
           this.checkGameStart();
         } else {
           // Room was deleted
-          this.leaveRoom();
+          this.currentRoomId = null;
+          this.isHost = false;
+          this.roomData = null;
+          this.showScreen('screen-lobby');
         }
       }
     });
@@ -134,34 +177,54 @@ export class Lobby {
     this.showScreen('screen-char-create');
   }
 
-  joinRoom(roomId) {
-    this.isHost = false;
+  joinRoom(roomId, isMyRoom, state) {
+    const room = this.allRooms.find(r => r.id === roomId);
+    if (!room) return;
+    
     this.currentRoomId = roomId;
-
-    db.transact([
-      tx.rooms[this.currentRoomId].update({
-        p2_id: this.playerId,
-        p2_ready: false,
-        p2_race: 'human',
-        p2_class: 'fighter'
-      })
-    ]);
-
-    this.showScreen('screen-char-create');
+    
+    if (room.p1_id === this.playerId) {
+      this.isHost = true;
+    } else if (room.p2_id === this.playerId) {
+      this.isHost = false;
+    } else {
+      // New join as p2
+      this.isHost = false;
+      db.transact([
+        tx.rooms[roomId].update({
+          p2_id: this.playerId,
+          p2_ready: false,
+          p2_race: 'human',
+          p2_class: 'fighter'
+        })
+      ]);
+    }
+    
+    this.roomData = room; // manually set to allow immediate transition
+    
+    if (state === 'playing') {
+      this.startGameFromReconnection();
+    } else {
+      this.showScreen('screen-char-create');
+    }
   }
 
   leaveRoom() {
-    if (this.currentRoomId && this.isHost) {
-      // Host leaving deletes the room
-      db.transact([tx.rooms[this.currentRoomId].delete()]);
-    } else if (this.currentRoomId && !this.isHost) {
-      // Guest leaving just clears p2
-      db.transact([tx.rooms[this.currentRoomId].update({ p2_id: null, p2_ready: false })]);
+    if (this.currentRoomId) {
+      // We no longer delete or clear p2_id to allow resuming.
+      // We just leave the screen.
+      this.currentRoomId = null;
+      this.isHost = false;
+      this.roomData = null;
+      this.showScreen('screen-lobby');
     }
-    this.currentRoomId = null;
-    this.isHost = false;
-    this.roomData = null;
-    this.showScreen('screen-lobby');
+  }
+  
+  deleteRoom(roomId) {
+    db.transact([tx.rooms[roomId].delete()]);
+    if (this.currentRoomId === roomId) {
+       this.leaveRoom();
+    }
   }
 
   updateSelection(type, value) {
@@ -238,18 +301,20 @@ export class Lobby {
       if (this.isHost) {
         db.transact([tx.rooms[this.currentRoomId].update({ state: 'playing' })]);
       }
-      
-      this.showScreen('screen-game');
-      
-      // Call main game start
-      this.onStartGame({
-        roomId: this.currentRoomId,
-        isHost: this.isHost,
-        playerId: this.playerId,
-        p1: { name: this.roomData.p1_name || 'Jogador 1', race: this.roomData.p1_race, cls: this.roomData.p1_class },
-        p2: { name: this.roomData.p2_name || 'Jogador 2', race: this.roomData.p2_race, cls: this.roomData.p2_class },
-        seed: this.roomData.seed
-      });
+      this.startGameFromReconnection();
     }
+  }
+
+  startGameFromReconnection() {
+    if (!this.roomData) return;
+    this.showScreen('screen-game');
+    this.onStartGame({
+      roomId: this.currentRoomId,
+      isHost: this.isHost,
+      playerId: this.playerId,
+      p1: { name: this.roomData.p1_name || 'Jogador 1', race: this.roomData.p1_race, cls: this.roomData.p1_class },
+      p2: { name: this.roomData.p2_name || 'Jogador 2', race: this.roomData.p2_race, cls: this.roomData.p2_class },
+      seed: this.roomData.seed
+    });
   }
 }

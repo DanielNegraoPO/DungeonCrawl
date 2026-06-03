@@ -359,11 +359,23 @@ export class GameEngine {
       }
     }
   }
+
   _processNetworkActions(actionsMap) {
     if (!actionsMap) return;
+    
+    let processed = false;
+    let isReplaying = false;
+
+    // Se temos múltiplas ações à frente, estamos num catch-up longo
+    if (actionsMap[this.nextActionIndex + 1]) {
+       isReplaying = true;
+    }
+
     while (actionsMap[this.nextActionIndex]) {
+      processed = true;
       const action = actionsMap[this.nextActionIndex];
       this._isSimulating = true;
+      this._isReplaying = isReplaying; // Tells internal methods to suppress draws
       const p = this.players[action.pIdx];
       
       let handled = false;
@@ -376,7 +388,7 @@ export class GameEngine {
           break;
         case 'wait': 
           this._playerWait(p); 
-          handled = true;
+          handled = true; 
           cost = p.getActionCost('wait');
           break;
         case 'pickup': 
@@ -406,8 +418,13 @@ export class GameEngine {
       }
 
       this._isSimulating = false;
+      this._isReplaying = false;
       this.nextActionIndex++;
-      this._renderHUDs(); // Ensure UI updates after DB sync
+    }
+    
+    if (processed) {
+      if (this.renderer) this.renderer.draw();
+      this._renderHUDs(); // Ensure UI updates after DB sync loop completes
     }
   }
 
