@@ -416,8 +416,11 @@ export class GameEngine {
     const active = this.turnMgr.getActivePlayer();
     if (!active) return;
     const action = { type, payload, pIdx: active.playerIndex };
-    const updateObj = {};
-    updateObj[`actions.${this.nextActionIndex}`] = action;
+    
+    // InstantDB deep merges nested objects, so we nest the index inside actions
+    const updateObj = { actions: {} };
+    updateObj.actions[this.nextActionIndex] = action;
+    
     db.transact([tx.rooms[this.networkConfig.roomId].update(updateObj)]);
   }
 
