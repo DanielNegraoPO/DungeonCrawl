@@ -18,7 +18,7 @@ function buildChoiceGrid(containerId, player, type, data) {
   const entries = Object.entries(data);
   for (const [id, def] of entries) {
     const btn = document.createElement('button');
-    btn.className = `choice-btn ${playerPrefix}`;
+    btn.className = `choice-btn ${player}`;
     btn.dataset.id = id;
     btn.innerHTML = `
       <div class="choice-name">${def.name}</div>
