@@ -192,9 +192,13 @@ export class Lobby {
     if (!this.roomData) return;
     const rd = this.roomData;
 
-    // Sync names
-    if (rd.p1_name !== undefined) document.getElementById('p1-name').value = rd.p1_name;
-    if (rd.p2_name !== undefined) document.getElementById('p2-name').value = rd.p2_name;
+    // Sync names only if the input is not currently focused by the user
+    if (rd.p1_name !== undefined && document.activeElement !== document.getElementById('p1-name')) {
+      document.getElementById('p1-name').value = rd.p1_name;
+    }
+    if (rd.p2_name !== undefined && document.activeElement !== document.getElementById('p2-name')) {
+      document.getElementById('p2-name').value = rd.p2_name;
+    }
     
     // Disable inputs for the other player
     document.getElementById('p1-name').disabled = !this.isHost || rd.p1_ready;

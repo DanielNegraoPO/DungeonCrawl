@@ -479,7 +479,7 @@ export class GameEngine {
 
     let handled = false;
 
-    if (dir !== null) {
+    if (dir) {
       e.preventDefault();
       const [dx, dy] = dir;
       if (dx === 0 && dy === 0) {
